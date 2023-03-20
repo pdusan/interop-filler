@@ -1,12 +1,25 @@
 package com.interop.data;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLXML;
 import java.sql.Statement;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.TransformerException;
 
 public class Filler {
 
     private Connection connection;
+
+    private Random rand = new Random();
 
     public Filler(Connection connection) {
         this.connection = connection;
@@ -23,14 +36,14 @@ public class Filler {
             stmt.executeUpdate("""
                     CREATE TABLE public.games
                     (
-                        name character varying(256) COLLATE pg_catalog."default" NOT NULL,
-                        tester character varying(256) COLLATE pg_catalog."default",
-                        length character varying(256) COLLATE pg_catalog."default",
+                        name character varying(256) NOT NULL,
+                        genre character varying(256),
+                        length character varying(256),
                         size real NOT NULL,
                         players integer NOT NULL,
                         review_score real NOT NULL,
                         date date NOT NULL,
-                        CONSTRAINT games_pkey PRIMARY KEY (name)
+                        PRIMARY KEY (name)
                     )""");
             stmt.executeUpdate("""
                     CREATE TABLE public.friends
@@ -50,7 +63,7 @@ public class Filler {
             stmt.executeUpdate("""
                     CREATE TABLE public.invitations
                         (
-                            date date UNIQUE NOT NULL,
+                            date date NOT NULL,
                             address character varying(256) NOT NULL,
                             available_games xml NOT NULL,
                             attending boolean NOT NULL,
@@ -135,6 +148,223 @@ public class Filler {
             stmt.executeUpdate(
                     "ALTER TABLE parties ADD CONSTRAINT fk_address FOREIGN KEY(address) REFERENCES venues(address)");
             stmt.executeUpdate("ALTER TABLE matches ADD CONSTRAINT fk_date FOREIGN KEY(date) REFERENCES parties(date)");
+        }
+    }
+
+    public void insertData() throws SQLException, ParserConfigurationException, TransformerException {
+        // INSERT INTO INVITATIONS
+        for (int i = 0; i < 1000; i++) {
+            SQLXML xml = connection.createSQLXML();
+            xml.setString(Generator.getGames());
+            String ins = "INSERT INTO invitations(date, address, available_games, attending, special_note, respond_by) VALUES(?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = connection.prepareStatement(ins, Statement.RETURN_GENERATED_KEYS);
+            stmt.setObject(1, Generator.getPartyDate(), java.sql.Types.DATE);
+            stmt.setString(2, Generator.getAddress());
+            stmt.setSQLXML(3, xml);
+            stmt.setBoolean(4, rand.nextBoolean());
+            stmt.setString(5, Generator.getNote());
+            stmt.setObject(6, Generator.getPartyDate(), java.sql.Types.DATE);
+
+            try {
+
+                stmt.executeUpdate();
+            } catch (Exception e) {
+                continue;
+            }
+        }
+
+        // INSERT INTO VENUES
+        for (int i = 0; i < 1000; i++) {
+
+            String ins = "INSERT INTO venues(address, postal_code, town, parking_options, type, owner) VALUES(?, ?, ?, ?, ?, to_json(?::json))";
+            PreparedStatement stmt = connection.prepareStatement(ins, Statement.RETURN_GENERATED_KEYS);
+            stmt.setString(1, Generator.getAddress());
+            stmt.setInt(2, rand.nextInt(5000) + 5000);
+            stmt.setString(3, Generator.getTown());
+            stmt.setBoolean(4, rand.nextBoolean());
+            stmt.setString(5, Generator.getVenueType());
+            stmt.setString(6, Generator.getJsonPerson());
+
+            try {
+
+                stmt.executeUpdate();
+            } catch (Exception e) {
+                continue;
+            }
+        }
+
+        Statement st = connection.createStatement();
+        ResultSet rs = st.executeQuery("SELECT address FROM venues");
+        List<String> addresses = new ArrayList<>();
+        while (rs.next()) {
+            addresses.add(rs.getString("address"));
+        }
+        rs.close();
+        st.close();
+        // INSERT INTO PARTIES
+        for (int i = 0; i < 1000; i++) {
+            SQLXML xml = connection.createSQLXML();
+            xml.setString(Generator.getGames());
+            String ins = "INSERT INTO parties(date, address, attendees, beer, host, games, food) VALUES(?, ?, ?, ?, to_json(?::json), ?, ?)";
+            PreparedStatement stmt = connection.prepareStatement(ins, Statement.RETURN_GENERATED_KEYS);
+            stmt.setObject(1, Generator.getPartyDate(), java.sql.Types.DATE);
+            stmt.setString(2, addresses.get(rand.nextInt(addresses.size())));
+            stmt.setInt(3, rand.nextInt(2) + 8);
+            stmt.setDouble(4, rand.nextDouble() + 18 + rand.nextInt(2));
+            stmt.setString(5, Generator.getJsonPerson());
+            stmt.setSQLXML(6, xml);
+            stmt.setString(7, Generator.getFood());
+
+            try {
+
+                stmt.executeUpdate();
+            } catch (Exception e) {
+                continue;
+            }
+        }
+
+        st = connection.createStatement();
+        rs = st.executeQuery("SELECT date FROM parties");
+        List<LocalDate> dates = new ArrayList<>();
+        while (rs.next()) {
+            dates.add(LocalDate.parse(rs.getString("date")));
+        }
+        st.close();
+        rs.close();
+        // INSERT INTO GAMES
+        for (int i = 0; i < 1000; i++) {
+            String ins = "INSERT INTO games(name, genre, length, size, players, review_score, date) VALUES(?, ?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = connection.prepareStatement(ins, Statement.RETURN_GENERATED_KEYS);
+            stmt.setString(1, Generator.getGameName());
+            stmt.setString(2, Generator.getGameGenre());
+            stmt.setString(3, String.valueOf(rand.nextInt(15) + 5) + "Hours ");
+            stmt.setDouble(4, rand.nextDouble() + 20 + rand.nextInt(10));
+            stmt.setInt(5, rand.nextInt(6) + 1);
+            stmt.setDouble(6, rand.nextDouble() + rand.nextInt(10));
+            stmt.setObject(7, dates.get(rand.nextInt(dates.size())), java.sql.Types.DATE);
+
+            try {
+
+                stmt.executeUpdate();
+            } catch (Exception e) {
+                continue;
+            }
+        }
+
+        st = connection.createStatement();
+        List<LocalDate> partyDate = new ArrayList<>();
+        Map<LocalDate, String> invDetails = new HashMap<>();
+        rs = st.executeQuery("SELECT date FROM parties");
+        while (rs.next()) {
+            partyDate.add(LocalDate.parse(rs.getString("date")));
+        }
+        rs = st.executeQuery("SELECT date, address FROM invitations");
+        while (rs.next()) {
+            invDetails.put(LocalDate.parse(rs.getString("date")), rs.getString("address"));
+        }
+        rs.close();
+        st.close();
+        List<LocalDate> mapDates = new ArrayList<LocalDate>(invDetails.keySet());
+        // INSERT INTO FRIENDS
+        for (int i = 0; i < 1000; i++) {
+            LocalDate randDate = mapDates.get(rand.nextInt(mapDates.size()));
+            SQLXML xml = connection.createSQLXML();
+            xml.setString(Generator.getGames());
+            String ins = "INSERT INTO friends(first_name, last_name, address, beer_preference, liked_games, age, inv_date, inv_address, party_date) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = connection.prepareStatement(ins, Statement.RETURN_GENERATED_KEYS);
+            stmt.setString(1, Generator.getFirstName());
+            stmt.setString(2, Generator.getLastName());
+            stmt.setString(3, Generator.getAddress());
+            stmt.setDouble(4, rand.nextDouble() + rand.nextInt(3));
+            stmt.setSQLXML(5, xml);
+            stmt.setInt(6, rand.nextInt(8) + 20);
+            stmt.setObject(7, randDate, java.sql.Types.DATE);
+            stmt.setString(8, invDetails.get(randDate));
+            stmt.setObject(9, partyDate.get(rand.nextInt(partyDate.size())), java.sql.Types.DATE);
+
+            try {
+
+                stmt.executeUpdate();
+            } catch (Exception e) {
+                continue;
+            }
+        }
+
+        st = connection.createStatement();
+        rs = st.executeQuery("SELECT name FROM games");
+        List<String> gameNames = new ArrayList<>();
+        while (rs.next()) {
+            gameNames.add(rs.getString("name"));
+        }
+        rs = st.executeQuery("SELECT first_name, last_name, address FROM friends");
+        // INSERT INTO LIKESGAMES
+        for (int i = 0; i < 1000; i++) {
+
+            String ins = "INSERT INTO likesgames(name, first_name, last_name, address) VALUES(?, ?, ?, ?)";
+            PreparedStatement stmt = connection.prepareStatement(ins, Statement.RETURN_GENERATED_KEYS);
+            stmt.setString(1, gameNames.get(rand.nextInt(gameNames.size())));
+            if (rs.next()) {
+                stmt.setString(2, rs.getString("first_name"));
+                stmt.setString(3, rs.getString("last_name"));
+                stmt.setString(4, rs.getString("address"));
+            }
+
+            try {
+
+                stmt.executeUpdate();
+            } catch (Exception e) {
+                continue;
+            }
+        }
+        rs.close();
+        st.close();
+
+        st = connection.createStatement();
+        rs = st.executeQuery("SELECT address FROM venues");
+        List<String> venueAddrs = new ArrayList<>();
+        while (rs.next()) {
+            venueAddrs.add(rs.getString("address"));
+        }
+        rs.close();
+        st.close();
+        // INSERT INTO ROOMS
+        for (int i = 0; i < 1000; i++) {
+            String ins = "INSERT INTO rooms(name, address, accessories, has_neighbor, size, tables, outlets) VALUES(?, ?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = connection.prepareStatement(ins, Statement.RETURN_GENERATED_KEYS);
+            stmt.setString(1, Generator.getRoomName());
+            stmt.setString(2, venueAddrs.get(rand.nextInt(venueAddrs.size())));
+            stmt.setString(3, "Accessorie " + String.valueOf(rand.nextInt(20)));
+            stmt.setBoolean(4, rand.nextBoolean());
+            stmt.setDouble(5, rand.nextDouble() + 15 + rand.nextInt(5));
+            stmt.setInt(6, rand.nextInt(5));
+            stmt.setInt(7, rand.nextInt(10) + 5);
+
+            try {
+
+                stmt.executeUpdate();
+            } catch (Exception e) {
+                continue;
+            }
+        }
+
+        // INSRT INTO MATCHES
+        for (int i = 0; i < 1000; i++) {
+            String ins = "INSERT INTO matches(winner, date, duration, participants, mode, score, loser) VALUES(?, ?, ?, ?, ?, ?, ?)";
+            PreparedStatement stmt = connection.prepareStatement(ins, Statement.RETURN_GENERATED_KEYS);
+            stmt.setString(1, Generator.getNickname());
+            stmt.setObject(2, dates.get(rand.nextInt(dates.size())), java.sql.Types.DATE);
+            stmt.setDouble(3, rand.nextDouble() + 10 + rand.nextInt(4));
+            stmt.setInt(4, rand.nextInt(10));
+            stmt.setString(5, Generator.getGameMode());
+            stmt.setDouble(6, rand.nextDouble() + 200 + rand.nextInt(100));
+            stmt.setString(7, Generator.getNickname());
+
+            try {
+
+                stmt.executeUpdate();
+            } catch (Exception e) {
+                continue;
+            }
         }
     }
 }
