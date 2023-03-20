@@ -50,7 +50,7 @@ public class Filler {
             stmt.executeUpdate("""
                     CREATE TABLE public.invitations
                         (
-                            date date NOT NULL,
+                            date date UNIQUE NOT NULL,
                             address character varying(256) NOT NULL,
                             available_games xml NOT NULL,
                             attending boolean NOT NULL,
@@ -70,9 +70,9 @@ public class Filler {
                         );
                     """);
             stmt.executeUpdate("""
-                    CREATE TABLE public.venue
+                    CREATE TABLE public.venues
                         (
-                            address character varying(256) NOT NULL,
+                            address character varying(256) UNIQUE NOT NULL,
                             postal_code integer NOT NULL,
                             town character varying(256) NOT NULL,
                             parking_options boolean NOT NULL,
@@ -82,7 +82,7 @@ public class Filler {
                         );
                     """);
             stmt.executeUpdate("""
-                    CREATE TABLE public.room
+                    CREATE TABLE public.rooms
                         (
                             name character varying(256) NOT NULL,
                             address character varying(256) NOT NULL,
@@ -95,9 +95,9 @@ public class Filler {
                         );
                     """);
             stmt.executeUpdate("""
-                    CREATE TABLE public.party
+                    CREATE TABLE public.parties
                         (
-                            date date NOT NULL,
+                            date date UNIQUE NOT NULL,
                             address character varying(256) NOT NULL,
                             attendees integer NOT NULL,
                             beer real NOT NULL,
@@ -120,6 +120,21 @@ public class Filler {
                             PRIMARY KEY (winner, date)
                         );
                     """);
+
+            stmt.executeUpdate("ALTER TABLE games ADD CONSTRAINT fk_date FOREIGN KEY(date) REFERENCES parties(date);");
+            stmt.executeUpdate(
+                    "ALTER TABLE friends ADD CONSTRAINT fk_date FOREIGN KEY(party_date) REFERENCES parties(date)");
+            stmt.executeUpdate(
+                    "ALTER TABLE friends ADD CONSTRAINT fk_inv FOREIGN KEY(inv_date, inv_address) REFERENCES invitations(date, address)");
+            stmt.executeUpdate(
+                    "ALTER TABLE likesgames ADD CONSTRAINT fk_name FOREIGN KEY(name) REFERENCES games(name)");
+            stmt.executeUpdate(
+                    "ALTER TABLE likesgames ADD CONSTRAINT fk_friend FOREIGN KEY(first_name, last_name, address) REFERENCES friends(first_name, last_name, address)");
+            stmt.executeUpdate(
+                    "ALTER TABLE rooms ADD CONSTRAINT fk_address FOREIGN KEY(address) REFERENCES venues(address)");
+            stmt.executeUpdate(
+                    "ALTER TABLE parties ADD CONSTRAINT fk_address FOREIGN KEY(address) REFERENCES venues(address)");
+            stmt.executeUpdate("ALTER TABLE matches ADD CONSTRAINT fk_date FOREIGN KEY(date) REFERENCES parties(date)");
         }
     }
 }
