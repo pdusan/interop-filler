@@ -1,2 +1,3 @@
 /.vscode
+/postgres_db_data
 target
